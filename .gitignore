@@ -1,0 +1,50 @@
+# === Java / Maven ===
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+
+# === Gradle (not used — Maven only) ===
+backend/.gradle/
+backend/build/
+
+# === Node / React ===
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# === IDE ===
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# === SQLite ===
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+backend/data/
+
+# === Logs ===
+*.log
+npm-debug.log*
+
+# === Environment ===
+.env
+.env.local
+.env.*.local
+
+# === JVM ===
+*.hprof
+
+# === Test / Coverage ===
+frontend/coverage/
+
+# === OS ===
+.DS_Store
+Thumbs.db

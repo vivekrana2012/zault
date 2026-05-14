@@ -1,0 +1,40 @@
+# Production compose — pulls pre-built images from Docker Hub.
+# Used on the Debian laptop. Includes Watchtower for auto-updates.
+
+services:
+  backend:
+    image: vivekrana2012/zault-backend:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SQLITE_PATH=/data/zault.db
+      - ZAULT_USER_DB_DIR=${ZAULT_USER_DB_DIR:-/data/users}
+      - SPRING_PROFILES_ACTIVE=prod
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRY=${JWT_EXPIRY:-PT1H}
+      - ZAULT_ADMIN_USERNAME=${ZAULT_ADMIN_USERNAME:-admin}
+      - ZAULT_ADMIN_PASSWORD=${ZAULT_ADMIN_PASSWORD}
+    volumes:
+      - zault_data:/data
+
+  frontend:
+    image: vivekrana2012/zault-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=false
+
+volumes:
+  zault_data:

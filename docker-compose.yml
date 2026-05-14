@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SQLITE_PATH=/data/zault.db
+      - ZAULT_USER_DB_DIR=${ZAULT_USER_DB_DIR:-/data/users}
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+      - JWT_SECRET=${JWT_SECRET:-change-me-to-a-secure-32-char-min-secret!}
+      - JWT_EXPIRY=${JWT_EXPIRY:-PT1H}
+      - ZAULT_ADMIN_USERNAME=${ZAULT_ADMIN_USERNAME:-admin}
+      - ZAULT_ADMIN_PASSWORD=${ZAULT_ADMIN_PASSWORD:-}
+    volumes:
+      - zault_data:/data
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  zault_data:
