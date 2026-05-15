@@ -33,7 +33,7 @@ public class JwtService {
         this.tokenExpiry = expiry;
     }
 
-    public String generateToken(String username, Long userId) {
+    public String generateToken(String username, String userId) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(username)

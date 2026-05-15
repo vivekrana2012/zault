@@ -42,6 +42,42 @@ The visual language is inspired by architectural blueprints and engineering note
 
 ---
 
+## Component Inventory
+
+> **Check here before creating new components.** If a component exists for your use case, use it.
+
+### Custom Components
+
+| Component | File | Purpose | Example |
+|-----------|------|---------|---------|
+| `BracketButton` | `src/components/bracket-button.tsx` | Action buttons with auto-wrapped `[ label ]` brackets. | `<BracketButton label="Log out" onClick={handleLogout} />` |
+| `SubmitButton` | `src/components/submit-button.tsx` | Form submit with loading spinner + bracket wrapping. | `<SubmitButton loading={loading} label="Login" loadingLabel="Signing in…" />` |
+| `FormField` | `src/components/form-field.tsx` | Label + underline input + optional hint. | `<FormField label="Username" id="username" type="text" ... />` |
+| `FormError` | `src/components/form-error.tsx` | Error message with AlertCircle icon (red text, no background). | `<FormError message="Invalid credentials" />` |
+| `AuthPageLayout` | `src/components/auth-page-layout.tsx` | Auth page container: Header + centered card with sketch lines. | `<AuthPageLayout title="Login">...</AuthPageLayout>` |
+| `Header` | `src/components/header.tsx` | Top bar: logo + branding (sketch-lines-sm) + theme toggle. | `<Header />` |
+
+### Primitive UI Components (shadcn/ui, restyled)
+
+| Component | File | When to Use |
+|-----------|------|-------------|
+| `Button` | `src/components/ui/button.tsx` | **Only** for ghost links, icon-only buttons, or `asChild` delegation. Never for visible action buttons (use `BracketButton`). |
+| `Card` | `src/components/ui/card.tsx` | Bordered container with card bg. Use for dashboard panels. |
+| `Input` | `src/components/ui/input.tsx` | Raw underline input. Prefer `FormField` which wraps this with a label. |
+| `Label` | `src/components/ui/label.tsx` | Form label primitive. Prefer `FormField` which includes this. |
+
+### Decision Tree: Which Button Component?
+
+```
+Need a button?
+├── Is it a form submit? → SubmitButton
+├── Is it a visible action (logout, save, delete, confirm)? → BracketButton
+├── Is it icon-only (theme toggle, close)? → Button (size="icon")
+└── Is it a subtle navigation link (ghost text)? → Button (variant="ghost", asChild) + Link
+```
+
+---
+
 ## Color System
 
 All values are **HSL** (shadcn/ui convention). CSS variables omit the `hsl()` wrapper so Tailwind can apply opacity modifiers.
@@ -317,6 +353,12 @@ Added `.sketch-lines-sm` modifier in `globals.css`:
 - Inputs: **underline only** (bottom border, no box). No background, no side/top borders.
 - Focus: thicker underline instead of ring.
 - **No border radius.**
+
+---
+
+# Reference
+
+> The sections below are detailed reference material. Read them when implementing specific features (charts, animations, accessibility). You do not need to read all of this for every UI change.
 
 ---
 

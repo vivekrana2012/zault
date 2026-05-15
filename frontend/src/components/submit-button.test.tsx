@@ -5,7 +5,7 @@ import { SubmitButton } from "./submit-button"
 describe("SubmitButton", () => {
   it("renders the label when not loading", () => {
     render(<SubmitButton loading={false} label="Submit" loadingLabel="Submitting..." />)
-    expect(screen.getByRole("button", { name: "Submit" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "[ Submit ]" })).toBeInTheDocument()
   })
 
   it("renders loading label and spinner when loading", () => {

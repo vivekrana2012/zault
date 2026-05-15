@@ -33,7 +33,7 @@ describe("LoginPage", () => {
 
   it("renders login button", () => {
     renderLoginPage()
-    expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "[ Login ]" })).toBeInTheDocument()
   })
 
   it("renders link to register page", () => {

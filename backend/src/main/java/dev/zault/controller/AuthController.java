@@ -25,6 +25,7 @@ import java.util.Locale;
 import java.sql.ResultSet;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 @RestController
@@ -162,7 +163,7 @@ public class AuthController {
         String displayName = (request.displayName() != null && !request.displayName().isBlank())
                 ? request.displayName().trim() : null;
 
-        User user = new User(username, passwordEncoder.encode(request.password()), email, displayName);
+        User user = new User(UUID.randomUUID().toString(), username, passwordEncoder.encode(request.password()), email, displayName);
         try {
             userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {

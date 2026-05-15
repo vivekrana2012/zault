@@ -57,7 +57,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private void setAuthentication(Claims claims, HttpServletRequest request) {
         String username = claims.getSubject();
-        Long userId = extractUserId(claims);
+        String userId = extractUserId(claims);
         Set<String> scopes = extractScopes(claims);
 
         if (username != null && userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -72,17 +72,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
-    private Long extractUserId(Claims claims) {
+    private String extractUserId(Claims claims) {
         Object rawUserId = claims.get("uid");
-        if (rawUserId instanceof Number number) {
-            return number.longValue();
-        }
         if (rawUserId instanceof String value && !value.isBlank()) {
-            try {
-                return Long.parseLong(value);
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
+            return value;
+        }
+        if (rawUserId instanceof Number number) {
+            return String.valueOf(number.longValue());
         }
         return null;
     }

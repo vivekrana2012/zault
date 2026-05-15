@@ -1,15 +1,24 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router"
 import { ThemeProvider } from "@/hooks/use-theme"
+import { AuthProvider } from "@/hooks/use-auth"
 import RegisterPage from "./RegisterPage"
+
+beforeEach(() => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 })
+  )
+})
 
 function renderRegisterPage() {
   return render(
     <MemoryRouter>
       <ThemeProvider>
-        <RegisterPage />
+        <AuthProvider>
+          <RegisterPage />
+        </AuthProvider>
       </ThemeProvider>
     </MemoryRouter>
   )
@@ -27,7 +36,7 @@ describe("RegisterPage", () => {
 
   it("renders register button", () => {
     renderRegisterPage()
-    expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "[ Register ]" })).toBeInTheDocument()
   })
 
   it("renders link back to login", () => {

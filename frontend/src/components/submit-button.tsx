@@ -17,7 +17,7 @@ export function SubmitButton({ loading, disabled, label, loadingLabel }: SubmitB
           {loadingLabel}
         </>
       ) : (
-        label
+        <>[ {label} ]</>
       )}
     </Button>
   )

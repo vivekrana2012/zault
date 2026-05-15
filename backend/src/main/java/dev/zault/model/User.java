@@ -8,8 +8,8 @@ import java.time.Instant;
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(nullable = false, updatable = false, length = 36)
+    private String id;
 
     @Column(nullable = false, unique = true, length = 50)
     private String username;
@@ -37,14 +37,15 @@ public class User {
 
     protected User() {}
 
-    public User(String username, String passwordHash, String email, String displayName) {
+    public User(String id, String username, String passwordHash, String email, String displayName) {
+        this.id = id;
         this.username = username;
         this.passwordHash = passwordHash;
         this.email = email;
         this.displayName = displayName;
     }
 
-    public Long getId() { return id; }
+    public String getId() { return id; }
 
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }

@@ -8,6 +8,9 @@ export type RegisterRequest = components["schemas"]["RegisterRequest"]
 export type RegisterResponse = components["schemas"]["RegisterResponse"]
 export type MeResponse = components["schemas"]["MeResponse"]
 export type LogoutResponse = components["schemas"]["LogoutResponse"]
+export type InvestmentDto = components["schemas"]["InvestmentDto"]
+export type CreateInvestmentRequest = components["schemas"]["CreateInvestmentRequest"]
+export type UpdateInvestmentAmountRequest = components["schemas"]["UpdateInvestmentAmountRequest"]
 
 export interface ApiResult<T> {
   ok: boolean
@@ -17,7 +20,9 @@ export interface ApiResult<T> {
 }
 
 function getHeaders(includeBody: boolean): Record<string, string> {
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    "X-API-Version": "1",
+  }
   if (includeBody) {
     headers["Content-Type"] = "application/json"
   }
@@ -37,12 +42,22 @@ async function parseResponse<T>(res: Response): Promise<ApiResult<T>> {
   return { ok: false, status: res.status, data: null, error }
 }
 
-export async function apiPost<T = unknown>(
+export async function apiGet<T = unknown>(url: string): Promise<ApiResult<T>> {
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: getHeaders(false),
+  })
+  return parseResponse<T>(res)
+}
+
+async function apiWithBody<T>(
+  method: string,
   url: string,
   body?: unknown,
 ): Promise<ApiResult<T>> {
   const res = await fetch(url, {
-    method: "POST",
+    method,
     credentials: "include",
     headers: getHeaders(body != null),
     body: body != null ? JSON.stringify(body) : undefined,
@@ -50,9 +65,21 @@ export async function apiPost<T = unknown>(
   return parseResponse<T>(res)
 }
 
-export async function apiGet<T = unknown>(url: string): Promise<ApiResult<T>> {
+export function apiPost<T = unknown>(url: string, body?: unknown): Promise<ApiResult<T>> {
+  return apiWithBody<T>("POST", url, body)
+}
+
+export function apiPatch<T = unknown>(url: string, body?: unknown): Promise<ApiResult<T>> {
+  return apiWithBody<T>("PATCH", url, body)
+}
+
+export function apiPut<T = unknown>(url: string, body?: unknown): Promise<ApiResult<T>> {
+  return apiWithBody<T>("PUT", url, body)
+}
+
+export async function apiDelete<T = unknown>(url: string): Promise<ApiResult<T>> {
   const res = await fetch(url, {
-    method: "GET",
+    method: "DELETE",
     credentials: "include",
     headers: getHeaders(false),
   })

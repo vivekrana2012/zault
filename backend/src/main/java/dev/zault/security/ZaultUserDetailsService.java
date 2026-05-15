@@ -3,6 +3,7 @@ package dev.zault.security;
 import dev.zault.model.User;
 import dev.zault.repository.UserRepository;
 import dev.zault.util.IdentityNormalizer;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -20,9 +21,9 @@ public class ZaultUserDetailsService implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(@NonNull String username) throws UsernameNotFoundException {
         User user = userRepository.findByUsername(IdentityNormalizer.normalizeUsername(username))
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found - " + username));
 
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
@@ -30,4 +31,3 @@ public class ZaultUserDetailsService implements UserDetailsService {
                 List.of());
     }
 }
-

@@ -26,6 +26,10 @@
 | POST | `/api/auth/login` | Authenticate user, returns JWT cookie |
 | POST | `/api/auth/logout` | Clears JWT cookie |
 | GET | `/api/auth/me` | Returns current authenticated user |
+| GET | `/api/investments` | List current user investment rows |
+| POST | `/api/investments` | Create one investment row |
+| PATCH | `/api/investments/{id}` | Update only amount for one row |
+| DELETE | `/api/investments/{id}` | Delete one investment row |
 
 ## Authentication
 
@@ -38,17 +42,64 @@
 - Timing-attack mitigation on login (bcrypt runs even for unknown usernames)
 - Initial admin user seeded from `ZAULT_ADMIN_PASSWORD` env var on first startup
 
+## API Versioning
+
+- Header-based versioning via `X-API-Version`
+- Supported value currently: `1`
+- Header is required for `/api/**` except:
+  - `/api/auth/login`
+  - `/api/auth/register`
+  - `/api/health`
+- Error shape for missing/unsupported versions:
+  - `error` (message)
+  - `code` (`missing_api_version` or `unsupported_api_version`)
+  - `supportedVersions` (array)
+  - `receivedVersion` (null for missing header)
+  - `path`
+
 ## Data Model
 
-### Users table
+All schema changes must be reflected here and in the relevant source:
+- **Main DB** (`data/zault.db`) — update `src/main/resources/schema.sql`
+- **Per-user DB** (`data/users/{id}.db`) — update `UserDatabaseService.initializeSchema()`
+
+### Main DB — `data/zault.db`
+
+Managed by Spring SQL init from `schema.sql`. Hibernate DDL is disabled.
+
+#### `users`
 | Column | Type | Notes |
 |--------|------|-------|
-| id | BIGINT (PK) | Auto-increment |
-| username | VARCHAR(50) | Unique, lowercase |
-| password_hash | VARCHAR(72) | bcrypt |
-| failed_attempts | INT | Reset on successful login |
+| id | TEXT (PK) | Application-assigned UUID |
+| username | VARCHAR(50) | Unique |
+| password_hash | VARCHAR(72) | bcrypt (cost 12) |
+| email | VARCHAR(255) | Unique |
+| display_name | VARCHAR(100) | Nullable |
+| email_verified | BOOLEAN | Default false |
+| failed_attempts | INTEGER | Default 0, reset on successful login |
 | lockout_until | TIMESTAMP | Null when not locked |
-| created_at | TIMESTAMP | Immutable |
+| created_at | TIMESTAMP | Immutable, default CURRENT_TIMESTAMP |
+
+### Per-user DB — `data/users/{userId}.db`
+
+Each user gets their own SQLite file named after their UUID user ID. Schema is applied by `UserDatabaseService.initializeSchema()` on first connection.
+
+#### `user_db_meta`
+| Column | Type | Notes |
+|--------|------|-------|
+| key | TEXT (PK) | |
+| value | TEXT | Seeded with `created_at` = CURRENT_TIMESTAMP on init |
+
+#### `investments`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER (PK) | Auto-increment |
+| category | TEXT | Not null |
+| amount | NUMERIC | Not null, `>= 0` |
+| created_at | TEXT | Default CURRENT_TIMESTAMP |
+| updated_at | TEXT | Default CURRENT_TIMESTAMP, updated on write |
+
+Indexes: `idx_investments_category` on `investments(category)`
 
 _Next steps: Portfolio, Holding, Transaction entities._
 

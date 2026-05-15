@@ -17,25 +17,22 @@
 
 ## Current State
 
-- Bare React shell — App.tsx with default Vite template
-- No routing, state management, or component library yet
+- Auth flow complete: Login, Register, Logout
+- Pages: HomePage (authenticated), LoginPage, RegisterPage
+- Routing: React Router with auth-guarded routes
+- Theme toggle: Light/Dark with localStorage persistence
+- Reusable components: BracketButton, SubmitButton, FormField, FormError, Header, AuthPageLayout
 
 ## UI Decisions
 
 - **Design system:** Documented in `frontend/design.md` (single source of truth for tokens, colors, typography, component conventions)
 - **Component library:** shadcn/ui (Radix primitives + Tailwind CSS)
-- **Charts:** D3.js
+- **Charts:** D3.js (not yet implemented)
 - **Icons:** Lucide React
 - **Color mode:** Light + Dark with user toggle
-- **Aesthetic:** Clean & minimal, data-first
+- **Aesthetic:** Brutalist notebook — see `frontend/.instructions.md` for rules
 - **Routing:** React Router (`react-router`)
 - **State management:** _Not yet decided (TanStack Query candidate)_
-
-## Component Conventions
-
-- **All interactive elements** must use the `<Button>` component for consistent theming — never style links or clickable elements with ad-hoc classes.
-- **Navigation links** use `<Button variant="..." asChild><Link to="...">` — the `asChild` prop delegates rendering to `<Link>` while keeping Button's themed styles.
-- **Action buttons** use `<Button>` directly (form submits, toggles, etc.).
 
 ## Technical Debt
 

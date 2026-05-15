@@ -19,6 +19,7 @@ import java.sql.Statement;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -29,8 +30,8 @@ public class UserDatabaseService {
     private final Path baseDir;
     private final int maxOpenConnections;
     private final int busyTimeoutMs;
-    private final Map<Long, Connection> connectionCache = new LinkedHashMap<>(16, 0.75f, true);
-    private final Set<Long> initializedUserIds = ConcurrentHashMap.newKeySet();
+    private final Map<String, Connection> connectionCache = new LinkedHashMap<>(16, 0.75f, true);
+    private final Set<String> initializedUserIds = ConcurrentHashMap.newKeySet();
 
     public UserDatabaseService(
             @Value("${zault.user-db.base-dir:./user-dbs}") String baseDir,
@@ -41,7 +42,7 @@ public class UserDatabaseService {
         this.busyTimeoutMs = Math.max(1000, busyTimeoutMs);
     }
 
-    public void ensureUserDatabase(Long userId) {
+    public void ensureUserDatabase(String userId) {
         withUserConnection(userId, connection -> null);
     }
 
@@ -58,25 +59,23 @@ public class UserDatabaseService {
         return withUserConnection(principal.userId(), callback);
     }
 
-    public synchronized Path getUserDatabasePath(Long userId) {
-        if (userId == null || userId <= 0) {
-            throw new IllegalArgumentException("User ID must be a positive number");
-        }
-        return baseDir.resolve(userId + ".db");
+    public synchronized Path getUserDatabasePath(String userId) {
+        return baseDir.resolve(normalizeUserId(userId) + ".db");
     }
 
-    public <T> T withUserConnection(Long userId, SqlFunction<Connection, T> callback) {
+    public <T> T withUserConnection(String userId, SqlFunction<Connection, T> callback) {
+        String normalizedUserId = normalizeUserId(userId);
         Connection connection;
         synchronized (this) {
-            connection = getOrCreateConnection(userId);
+            connection = getOrCreateConnection(normalizedUserId);
         }
 
         synchronized (connection) {
             try {
-                ensureInitialized(userId, connection);
+                ensureInitialized(normalizedUserId, connection);
                 return callback.apply(connection);
             } catch (SQLException e) {
-                throw new IllegalStateException("Failed to execute user DB operation for user " + userId, e);
+                throw new IllegalStateException("Failed to execute user DB operation for user " + normalizedUserId, e);
             }
         }
     }
@@ -90,7 +89,7 @@ public class UserDatabaseService {
         initializedUserIds.clear();
     }
 
-    private synchronized Connection getOrCreateConnection(Long userId) {
+    private synchronized Connection getOrCreateConnection(String userId) {
         Connection existing = connectionCache.get(userId);
         if (existing != null) {
             if (isConnectionHealthy(existing)) {
@@ -104,7 +103,7 @@ public class UserDatabaseService {
         connectionCache.put(userId, created);
 
         if (connectionCache.size() > maxOpenConnections) {
-            Long eldestKey = connectionCache.keySet().iterator().next();
+            String eldestKey = connectionCache.keySet().iterator().next();
             Connection evicted = connectionCache.remove(eldestKey);
             closeQuietly(evicted);
             log.debug("Evicted user DB connection for userId={}", eldestKey);
@@ -113,7 +112,7 @@ public class UserDatabaseService {
         return created;
     }
 
-    private Connection openConnection(Long userId) {
+    private Connection openConnection(String userId) {
         Path dbPath = getUserDatabasePath(userId);
         try {
             Files.createDirectories(baseDir);
@@ -130,12 +129,23 @@ public class UserDatabaseService {
         }
     }
 
-    private void ensureInitialized(Long userId, Connection connection) throws SQLException {
+    private void ensureInitialized(String userId, Connection connection) throws SQLException {
         if (initializedUserIds.contains(userId)) {
             return;
         }
         initializeSchema(connection);
         initializedUserIds.add(userId);
+    }
+
+    private String normalizeUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("User ID must not be blank");
+        }
+        try {
+            return UUID.fromString(userId.trim()).toString();
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("User ID must be a valid UUID", e);
+        }
     }
 
     private boolean isConnectionHealthy(Connection connection) {
@@ -172,6 +182,19 @@ public class UserDatabaseService {
             statement.execute("""
                     INSERT OR IGNORE INTO user_db_meta (key, value)
                     VALUES ('created_at', CURRENT_TIMESTAMP)
+                    """);
+            statement.execute("""
+                    CREATE TABLE IF NOT EXISTS investments (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        category TEXT NOT NULL,
+                        amount NUMERIC NOT NULL CHECK (amount >= 0),
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """);
+            statement.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_investments_category
+                    ON investments(category)
                     """);
         }
     }

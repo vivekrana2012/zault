@@ -18,9 +18,19 @@ Each sub-project has its own `.instructions.md` with project-specific convention
 
 ## Context Scoping
 
-- When working on **backend/** files: read `backend/CONTEXT.md` and `docs/api/openapi.yaml`. Do NOT read frontend code.
-- When working on **frontend/** files: read `frontend/CONTEXT.md` and `docs/api/openapi.yaml`. Do NOT read backend Java code.
-- The API spec is the single source of truth for the contract between frontend and backend.
+### Backend
+
+- Read `backend/CONTEXT.md` and `docs/api/openapi.yaml`. Do NOT read frontend code.
+
+### Frontend
+
+When making **any** frontend change, follow this discovery sequence:
+
+1. **Read `frontend/.instructions.md`** — contains hard visual/aesthetic rules and component guidance. This file is auto-loaded for `frontend/**` but read it before writing UI code.
+2. **Read `frontend/CONTEXT.md`** — current state, technical decisions, component conventions.
+3. **If you need detailed reference** (color tokens, chart specs, animation timings, full component inventory) → read `frontend/design.md`.
+
+Do NOT read backend Java code. The API spec (`docs/api/openapi.yaml`) is the single source of truth for the contract between frontend and backend.
 
 ## Conventions
 

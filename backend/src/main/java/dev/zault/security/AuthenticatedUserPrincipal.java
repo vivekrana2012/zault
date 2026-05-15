@@ -5,7 +5,7 @@ import java.util.Set;
 
 public record AuthenticatedUserPrincipal(
         String username,
-        Long userId,
+        String userId,
         Set<String> scopes) implements Principal {
 
     @Override

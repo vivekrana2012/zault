@@ -1,219 +1,251 @@
 openapi: 3.1.0
 info:
   title: Zault API
-  description: Zault investment dashboard backend API
+  description: |
+    Zault investment dashboard backend API.
+
+    **API versioning:** All endpoints under `/api/**` except `/api/auth/login`, `/api/auth/register`, and `/api/health*` require the `X-API-Version: 1` request header. Missing or unsupported values return `400` with a structured error body.
   version: 0.0.1
 servers:
-  - url: http://localhost:8080
-    description: Local development server
+- url: http://localhost:8080
+  description: Generated server url
 paths:
+  /api/investments:
+    get:
+      tags:
+      - investment-controller
+      operationId: listInvestments
+      parameters:
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvestmentDto"
+    post:
+      tags:
+      - investment-controller
+      operationId: createInvestment
+      parameters:
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvestmentRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
   /api/auth/register:
     post:
       tags:
-        - auth
+      - auth-controller
       operationId: register
-      summary: Register a new user account
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/RegisterRequest"
+        required: true
       responses:
-        "201":
-          description: User created successfully
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: "#/components/schemas/RegisterResponse"
-        "400":
-          description: Validation error
+                type: object
+                additionalProperties: {}
+  /api/auth/logout:
+    post:
+      tags:
+      - auth-controller
+      operationId: logout
+      parameters:
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      responses:
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Username or email already exists
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                type: object
+                additionalProperties:
+                  type: string
   /api/auth/login:
     post:
       tags:
-        - auth
+      - auth-controller
       operationId: login
-      summary: Authenticate and receive JWT cookie
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/LoginRequest"
+        required: true
       responses:
         "200":
-          description: Login successful (JWT set in HTTP-only cookie)
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: "#/components/schemas/LoginResponse"
-        "400":
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "423":
-          description: Account temporarily locked
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /api/auth/logout:
-    post:
+                type: object
+                additionalProperties: {}
+  /api/investments/{id}:
+    delete:
       tags:
-        - auth
-      operationId: logout
-      summary: Clear JWT cookie and log out
+      - investment-controller
+      operationId: deleteInvestment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
       responses:
         "200":
-          description: Logged out successfully
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: "#/components/schemas/LogoutResponse"
+                type: object
+    patch:
+      tags:
+      - investment-controller
+      operationId: updateInvestmentAmount
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvestmentAmountRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
   /api/auth/me:
     get:
       tags:
-        - auth
+      - auth-controller
       operationId: me
-      summary: Get current authenticated user info
+      parameters:
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
       responses:
         "200":
-          description: Current user details
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: "#/components/schemas/MeResponse"
-        "401":
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                type: object
+                additionalProperties: {}
 components:
   schemas:
+    CreateInvestmentRequest:
+      type: object
+      properties:
+        category:
+          type: string
+        amount:
+          type: number
     RegisterRequest:
       type: object
-      required:
-        - username
-        - email
-        - password
       properties:
         username:
           type: string
-          minLength: 3
-          maxLength: 50
-          pattern: "^[a-z0-9_]+$"
-          description: Alphanumeric and underscores only, lowercased
         email:
           type: string
-          format: email
-          maxLength: 255
         displayName:
           type: string
-          maxLength: 100
-          description: Optional display name
         password:
           type: string
-          minLength: 8
-          maxLength: 72
-    RegisterResponse:
-      type: object
-      required:
-        - username
-        - emailVerified
-        - userId
-      properties:
-        username:
-          type: string
-        emailVerified:
-          type: boolean
-        userId:
-          type: integer
-          format: int64
     LoginRequest:
       type: object
-      required:
-        - username
-        - password
       properties:
         username:
           type: string
         password:
           type: string
-    LoginResponse:
+    UpdateInvestmentAmountRequest:
       type: object
-      required:
-        - username
-        - emailVerified
-        - scopes
       properties:
-        username:
-          type: string
-        emailVerified:
-          type: boolean
-        scopes:
-          type: array
-          items:
-            type: string
-    LogoutResponse:
+        amount:
+          type: number
+    InvestmentDto:
       type: object
-      required:
-        - status
       properties:
-        status:
-          type: string
-          enum:
-            - logged_out
-    MeResponse:
-      type: object
-      required:
-        - username
-        - email
-        - emailVerified
-      properties:
-        username:
-          type: string
-        email:
-          type: string
-        displayName:
-          type: string
-          nullable: true
-        emailVerified:
-          type: boolean
-        userId:
+        id:
           type: integer
           format: int64
-        scopes:
-          type: array
-          items:
-            type: string
-        userDbPath:
+        category:
           type: string
-        userDbCreatedAt:
-          type: string
-          nullable: true
-    ErrorResponse:
-      type: object
-      required:
-        - error
-      properties:
-        error:
-          type: string
+        amount:
+          type: number

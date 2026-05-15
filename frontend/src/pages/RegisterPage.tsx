@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { Link } from "react-router"
-import { CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { BracketButton } from "@/components/bracket-button"
 import { AuthPageLayout } from "@/components/auth-page-layout"
 import { FormField } from "@/components/form-field"
 import { FormError } from "@/components/form-error"
@@ -59,13 +59,12 @@ export default function RegisterPage() {
   if (success) {
     return (
       <AuthPageLayout title="Registered">
-        <div className="flex items-center justify-center gap-2 p-3 text-sm font-bold text-gain">
-          <CheckCircle className="h-4 w-4 shrink-0" />
+        <div className="flex items-center justify-center p-3 text-sm font-bold text-gain">
           <span>Account created. An admin must verify your email before full access is granted.</span>
         </div>
         <div className="flex justify-end">
           <Link to="/login">
-            <Button variant="outline">Go to Login</Button>
+            <BracketButton label="Go to Login" />
           </Link>
         </div>
       </AuthPageLayout>
