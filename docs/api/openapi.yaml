@@ -10,6 +10,59 @@ servers:
 - url: http://localhost:8080
   description: Generated server url
 paths:
+  /api/tradebook/files:
+    get:
+      tags:
+      - tradebook-controller
+      operationId: listFiles
+      parameters:
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TradeFileDto"
+    post:
+      tags:
+      - tradebook-controller
+      operationId: uploadFiles
+      parameters:
+      - name: files
+        in: query
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+            format: binary
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
   /api/investments:
     get:
       tags:
@@ -65,6 +118,7 @@ paths:
     post:
       tags:
       - auth-controller
+      summary: Register a new user
       operationId: register
       requestBody:
         content:
@@ -73,17 +127,29 @@ paths:
               $ref: "#/components/schemas/RegisterRequest"
         required: true
       responses:
-        "200":
-          description: OK
+        "201":
+          description: User registered
           content:
             '*/*':
               schema:
-                type: object
-                additionalProperties: {}
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          description: Validation error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/auth/logout:
     post:
       tags:
       - auth-controller
+      summary: Logout current user
       operationId: logout
       parameters:
       - name: X-API-Version
@@ -97,17 +163,16 @@ paths:
           - "1"
       responses:
         "200":
-          description: OK
+          description: Logged out
           content:
             '*/*':
               schema:
-                type: object
-                additionalProperties:
-                  type: string
+                $ref: "#/components/schemas/LogoutResponse"
   /api/auth/login:
     post:
       tags:
       - auth-controller
+      summary: Authenticate user
       operationId: login
       requestBody:
         content:
@@ -117,12 +182,29 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
+          description: Authenticated
           content:
             '*/*':
               schema:
-                type: object
-                additionalProperties: {}
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Validation error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "423":
+          description: Account locked
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/investments/{id}:
     delete:
       tags:
@@ -184,11 +266,52 @@ paths:
             '*/*':
               schema:
                 type: object
-  /api/auth/me:
+  /api/tradebook/trades:
     get:
       tags:
-      - auth-controller
-      operationId: me
+      - tradebook-controller
+      operationId: getTrades
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      - name: fileId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TradesPageDto"
+  /api/tradebook/allocations:
+    get:
+      tags:
+      - tradebook-controller
+      operationId: getAllocations
       parameters:
       - name: X-API-Version
         in: header
@@ -205,8 +328,63 @@ paths:
           content:
             '*/*':
               schema:
+                $ref: "#/components/schemas/AllocationsDto"
+  /api/auth/me:
+    get:
+      tags:
+      - auth-controller
+      summary: Get current authenticated user
+      operationId: me
+      parameters:
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      responses:
+        "200":
+          description: Current user
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          description: Not authenticated
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/tradebook/files/{fileId}:
+    delete:
+      tags:
+      - tradebook-controller
+      operationId: deleteFile
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
                 type: object
-                additionalProperties: {}
 components:
   schemas:
     CreateInvestmentRequest:
@@ -227,6 +405,25 @@ components:
           type: string
         password:
           type: string
+    RegisterResponse:
+      type: object
+      properties:
+        username:
+          type: string
+        emailVerified:
+          type: boolean
+        userId:
+          type: string
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+    LogoutResponse:
+      type: object
+      properties:
+        status:
+          type: string
     LoginRequest:
       type: object
       properties:
@@ -234,10 +431,101 @@ components:
           type: string
         password:
           type: string
+    LoginResponse:
+      type: object
+      properties:
+        username:
+          type: string
+        emailVerified:
+          type: boolean
+        scopes:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
     UpdateInvestmentAmountRequest:
       type: object
       properties:
         amount:
+          type: number
+    TradeDto:
+      type: object
+      properties:
+        tradeId:
+          type: string
+        fileId:
+          type: string
+        symbol:
+          type: string
+        isin:
+          type: string
+        tradeDate:
+          type: string
+        exchange:
+          type: string
+        segment:
+          type: string
+        series:
+          type: string
+        tradeType:
+          type: string
+        auction:
+          type: boolean
+        quantity:
+          type: number
+        price:
+          type: number
+        orderId:
+          type: string
+        orderExecutionTime:
+          type: string
+    TradesPageDto:
+      type: object
+      properties:
+        trades:
+          type: array
+          items:
+            $ref: "#/components/schemas/TradeDto"
+        totalCount:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    TradeFileDto:
+      type: object
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        rowCount:
+          type: integer
+          format: int32
+        uploadedAt:
+          type: string
+    AllocationDto:
+      type: object
+      properties:
+        isin:
+          type: string
+        symbol:
+          type: string
+        netQuantity:
+          type: number
+        investedAmount:
+          type: number
+    AllocationsDto:
+      type: object
+      properties:
+        allocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AllocationDto"
+        totalInvested:
           type: number
     InvestmentDto:
       type: object
@@ -249,3 +537,25 @@ components:
           type: string
         amount:
           type: number
+    MeResponse:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+        displayName:
+          type: string
+        emailVerified:
+          type: boolean
+        userId:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        userDbPath:
+          type: string
+        userDbCreatedAt:
+          type: string

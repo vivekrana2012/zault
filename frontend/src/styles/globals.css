@@ -142,6 +142,7 @@
   .sketch-lines {
     position: relative;
     padding: 4rem 2.5rem;
+    margin-bottom: 3rem;
     box-shadow: 0 12px 12px -12px rgba(0, 0, 0, 0.2);
   }
 

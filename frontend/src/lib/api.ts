@@ -11,6 +11,11 @@ export type LogoutResponse = components["schemas"]["LogoutResponse"]
 export type InvestmentDto = components["schemas"]["InvestmentDto"]
 export type CreateInvestmentRequest = components["schemas"]["CreateInvestmentRequest"]
 export type UpdateInvestmentAmountRequest = components["schemas"]["UpdateInvestmentAmountRequest"]
+export type TradeDto = components["schemas"]["TradeDto"]
+export type TradesPageDto = components["schemas"]["TradesPageDto"]
+export type TradeFileDto = components["schemas"]["TradeFileDto"]
+export type AllocationDto = components["schemas"]["AllocationDto"]
+export type AllocationsDto = components["schemas"]["AllocationsDto"]
 
 export interface ApiResult<T> {
   ok: boolean
@@ -82,6 +87,27 @@ export async function apiDelete<T = unknown>(url: string): Promise<ApiResult<T>>
     method: "DELETE",
     credentials: "include",
     headers: getHeaders(false),
+  })
+  return parseResponse<T>(res)
+}
+
+export async function apiUploadFiles<T = unknown>(url: string, files: File[]): Promise<ApiResult<T>> {
+  const formData = new FormData()
+  for (const file of files) {
+    formData.append("files", file)
+  }
+  const headers: Record<string, string> = {
+    "X-API-Version": "1",
+  }
+  const csrfToken = getCsrfToken()
+  if (csrfToken) {
+    headers["X-XSRF-TOKEN"] = csrfToken
+  }
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: formData,
   })
   return parseResponse<T>(res)
 }

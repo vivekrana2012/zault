@@ -4,11 +4,11 @@ import { BracketButton } from "@/components/bracket-button"
 import type { UploadedCsvFile } from "@/hooks/use-trades"
 
 interface CsvUploadProps {
-  onAddFiles: (files: File[]) => void
+  onAddFiles: (files: File[]) => Promise<void>
   uploadedFiles: UploadedCsvFile[]
   totalRows: number
-  onRemoveFile: (fileId: string) => void
-  onClearAll: () => void
+  onRemoveFile: (fileId: string) => Promise<void>
+  onClearAll: () => Promise<void>
 }
 
 export function CsvUpload({
@@ -51,8 +51,8 @@ export function CsvUpload({
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
       className={[
-        "w-full border p-8 flex flex-col items-center justify-center gap-4 transition-colors",
-        dragging ? "border-foreground bg-accent" : "border-foreground/30",
+        "w-full border p-8 flex flex-col items-center justify-center gap-4 transition-colors rounded-lg shadow-sm",
+        dragging ? "border-foreground bg-accent" : "border-foreground/30 bg-white/50 dark:bg-black",
         loaded ? "border-dashed" : "border-dashed",
       ].join(" ")}
     >
@@ -72,7 +72,8 @@ export function CsvUpload({
           <div className="text-center">
             <p className="text-sm font-medium">[ Upload Tradebook ]</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              CSV with columns: date, asset, type, quantity, price, total
+              CSV with canonical header: symbol, isin, trade_date, exchange, segment, series, trade_type,
+              auction, quantity, price, trade_id, order_id, order_execution_time
             </p>
             <p className="text-xs text-muted-foreground">
               Drag &amp; drop one or more files, or choose files

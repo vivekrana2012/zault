@@ -2,6 +2,11 @@ spring:
   application:
     name: zault
 
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 25MB
+
   datasource:
     url: jdbc:sqlite:${SQLITE_PATH:./data/zault.db}?busy_timeout=${SQLITE_BUSY_TIMEOUT_MS:5000}
     driver-class-name: org.sqlite.JDBC

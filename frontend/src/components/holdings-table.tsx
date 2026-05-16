@@ -4,8 +4,9 @@ import type { CurrencySymbol } from "@/types/holdings"
 import { CategorySelect } from "@/components/category-select"
 import { BracketButton } from "@/components/bracket-button"
 import { Input } from "@/components/ui/input"
+import { roundAmount, amountFormat } from "@/lib/currency"
 
-const AMOUNT_INPUT_CLASS = "w-28 text-center mx-auto border-b border-foreground/30 focus-visible:border-b-2 focus-visible:border-foreground/60"
+const AMOUNT_INPUT_CLASS = "w-28 text-right ml-auto border-b border-foreground/30 focus-visible:border-b-2 focus-visible:border-foreground/60"
 
 interface HoldingsTableProps {
   holdings: HoldingWithPercentage[]
@@ -30,7 +31,7 @@ export function HoldingsTable({
   const [editAmount, setEditAmount] = useState("")
 
   const handleAdd = () => {
-    const amount = parseFloat(newAmount)
+    const amount = roundAmount(parseFloat(newAmount))
     if (!newCategory.trim() || isNaN(amount) || amount <= 0) return
     if (usedCategories.has(newCategory.trim())) return
     onAdd(newCategory.trim(), amount)
@@ -44,7 +45,7 @@ export function HoldingsTable({
   }
 
   const handleEditSave = (id: number) => {
-    const amount = parseFloat(editAmount)
+    const amount = roundAmount(parseFloat(editAmount))
     if (!isNaN(amount) && amount > 0) {
       onUpdate(id, { amount })
     }
@@ -63,7 +64,7 @@ export function HoldingsTable({
         <thead>
           <tr className="border-b-2">
             <th className="py-2 pr-4 text-center font-semibold">Category</th>
-            <th className="py-2 pr-4 text-center font-semibold">Amount</th>
+            <th className="py-2 pr-4 text-right font-semibold">Amount</th>
             <th className="py-2 pr-4 text-center font-semibold">%</th>
             <th className="py-2 text-center font-semibold">Actions</th>
           </tr>
@@ -72,7 +73,7 @@ export function HoldingsTable({
           {holdings.map((h) => (
             <tr key={h.id} className="border-b border-foreground/10">
               <td className="py-2 pr-4 text-center">{h.category}</td>
-              <td className="py-2 pr-4 text-center tabular-nums">
+              <td className="py-2 pr-4 text-right tabular-nums">
                 {editingId === h.id ? (
                   <Input
                     type="number"
@@ -93,7 +94,7 @@ export function HoldingsTable({
                     onClick={() => handleEditStart(h)}
                     title="Click to edit"
                   >
-                    {currency}{h.amount.toLocaleString()}
+                    {currency}{h.amount.toLocaleString(undefined, amountFormat)}
                   </span>
                 )}
               </td>
@@ -122,7 +123,7 @@ export function HoldingsTable({
                 placeholder="category"
               />
             </td>
-            <td className="py-2 pr-4 text-center">
+            <td className="py-2 pr-4 text-right">
               <Input
                 type="number"
                 value={newAmount}

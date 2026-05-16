@@ -18,6 +18,10 @@
 - OpenAPI spec auto-generated from controller annotations → `docs/api/openapi.yaml`
 - Swagger UI available at `/swagger-ui.html` in dev
 
+## Shared Data Docs
+
+- Tradebook CSV domain knowledge and column dictionary: [docs/domain/tradebook.md](../docs/domain/tradebook.md)
+
 ## Current Endpoints
 
 | Method | Path | Description |
@@ -30,6 +34,11 @@
 | POST | `/api/investments` | Create one investment row |
 | PATCH | `/api/investments/{id}` | Update only amount for one row |
 | DELETE | `/api/investments/{id}` | Delete one investment row |
+| POST | `/api/tradebook/files` | Upload CSV tradebook file(s), multipart/form-data |
+| GET | `/api/tradebook/files` | List uploaded tradebook files |
+| DELETE | `/api/tradebook/files/{fileId}` | Delete file and its owned trades, recomputes allocations |
+| GET | `/api/tradebook/allocations` | Get pre-computed allocation data (net positions by ISIN) |
+| GET | `/api/tradebook/trades` | Paginated trade listing (optional fileId filter) |
 
 ## Authentication
 
@@ -101,7 +110,44 @@ Each user gets their own SQLite file named after their UUID user ID. Schema is a
 
 Indexes: `idx_investments_category` on `investments(category)`
 
-_Next steps: Portfolio, Holding, Transaction entities._
+#### `tradebook_files`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | TEXT (PK) | UUID assigned at upload |
+| filename | TEXT | Not null, original filename |
+| row_count | INTEGER | Not null, trades persisted from this file |
+| uploaded_at | TEXT | Default CURRENT_TIMESTAMP |
+
+#### `trades`
+| Column | Type | Notes |
+|--------|------|-------|
+| trade_id | TEXT (PK) | Natural key from CSV — dedup anchor |
+| file_id | TEXT | Not null, FK → tradebook_files.id |
+| symbol | TEXT | Not null |
+| isin | TEXT | Not null, aggregation key |
+| trade_date | TEXT | Not null, YYYY-MM-DD |
+| exchange | TEXT | Not null |
+| segment | TEXT | Not null |
+| series | TEXT | Not null |
+| trade_type | TEXT | Not null, 'buy' or 'sell' |
+| auction | INTEGER | Not null, 0/1 |
+| quantity | TEXT | Not null, decimal as text for precision |
+| price | TEXT | Not null, decimal as text for precision |
+| order_id | TEXT | Not null |
+| order_execution_time | TEXT | Not null, ISO 8601 |
+
+Indexes: `idx_trades_isin` on `trades(isin)`, `idx_trades_file_id` on `trades(file_id)`
+
+#### `allocations`
+| Column | Type | Notes |
+|--------|------|-------|
+| isin | TEXT (PK) | Security identity |
+| symbol | TEXT | Not null |
+| net_quantity | TEXT | Not null, buy_qty - sell_qty |
+| invested_amount | TEXT | Not null, buy_amount - sell_amount |
+| updated_at | TEXT | Default CURRENT_TIMESTAMP |
+
+Pre-computed on every file upload/delete. Only positive net positions stored.
 
 ## Technical Debt
 

@@ -1,0 +1,7 @@
+target/
+build/
+data/
+*.db
+*.log
+.idea/
+*.iml

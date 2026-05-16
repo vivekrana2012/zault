@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/tradebook/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listFiles"];
+        put?: never;
+        post: operations["uploadFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/investments": {
         parameters: {
             query?: never;
@@ -29,6 +45,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Register a new user */
         post: operations["register"];
         delete?: never;
         options?: never;
@@ -45,6 +62,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Logout current user */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -61,6 +79,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Authenticate user */
         post: operations["login"];
         delete?: never;
         options?: never;
@@ -84,6 +103,38 @@ export interface paths {
         patch: operations["updateInvestmentAmount"];
         trace?: never;
     };
+    "/api/tradebook/trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTrades"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tradebook/allocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAllocations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me": {
         parameters: {
             query?: never;
@@ -91,10 +142,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Get current authenticated user */
         get: operations["me"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tradebook/files/{fileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteFile"];
         options?: never;
         head?: never;
         patch?: never;
@@ -114,18 +182,86 @@ export interface components {
             displayName?: string;
             password?: string;
         };
+        RegisterResponse: {
+            username?: string;
+            emailVerified?: boolean;
+            userId?: string;
+        };
+        ErrorResponse: {
+            error?: string;
+        };
+        LogoutResponse: {
+            status?: string;
+        };
         LoginRequest: {
             username?: string;
             password?: string;
         };
+        LoginResponse: {
+            username?: string;
+            emailVerified?: boolean;
+            scopes?: string[];
+        };
         UpdateInvestmentAmountRequest: {
             amount?: number;
+        };
+        TradeDto: {
+            tradeId?: string;
+            fileId?: string;
+            symbol?: string;
+            isin?: string;
+            tradeDate?: string;
+            exchange?: string;
+            segment?: string;
+            series?: string;
+            tradeType?: string;
+            auction?: boolean;
+            quantity?: number;
+            price?: number;
+            orderId?: string;
+            orderExecutionTime?: string;
+        };
+        TradesPageDto: {
+            trades?: components["schemas"]["TradeDto"][];
+            /** Format: int64 */
+            totalCount?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+        };
+        TradeFileDto: {
+            id?: string;
+            filename?: string;
+            /** Format: int32 */
+            rowCount?: number;
+            uploadedAt?: string;
+        };
+        AllocationDto: {
+            isin?: string;
+            symbol?: string;
+            netQuantity?: number;
+            investedAmount?: number;
+        };
+        AllocationsDto: {
+            allocations?: components["schemas"]["AllocationDto"][];
+            totalInvested?: number;
         };
         InvestmentDto: {
             /** Format: int64 */
             id?: number;
             category?: string;
             amount?: number;
+        };
+        MeResponse: {
+            username?: string;
+            email?: string;
+            displayName?: string;
+            emailVerified?: boolean;
+            userId?: string;
+            scopes?: string[];
+            userDbPath?: string;
+            userDbCreatedAt?: string;
         };
     };
     responses: never;
@@ -136,6 +272,54 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listFiles: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description API version — must be `1` */
+                "X-API-Version": "1";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TradeFileDto"][];
+                };
+            };
+        };
+    };
+    uploadFiles: {
+        parameters: {
+            query: {
+                files: string[];
+            };
+            header: {
+                /** @description API version — must be `1` */
+                "X-API-Version": "1";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": Record<string, never>;
+                };
+            };
+        };
+    };
     listInvestments: {
         parameters: {
             query?: never;
@@ -199,15 +383,31 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description User registered */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": {
-                        [key: string]: unknown;
-                    };
+                    "*/*": components["schemas"]["RegisterResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -224,15 +424,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Logged out */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": {
-                        [key: string]: string;
-                    };
+                    "*/*": components["schemas"]["LogoutResponse"];
                 };
             };
         };
@@ -250,15 +448,40 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Authenticated */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": {
-                        [key: string]: unknown;
-                    };
+                    "*/*": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid credentials */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Account locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -317,7 +540,34 @@ export interface operations {
             };
         };
     };
-    me: {
+    getTrades: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                fileId?: string;
+            };
+            header: {
+                /** @description API version — must be `1` */
+                "X-API-Version": "1";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TradesPageDto"];
+                };
+            };
+        };
+    };
+    getAllocations: {
         parameters: {
             query?: never;
             header: {
@@ -335,9 +585,64 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": {
-                        [key: string]: unknown;
-                    };
+                    "*/*": components["schemas"]["AllocationsDto"];
+                };
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description API version — must be `1` */
+                "X-API-Version": "1";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteFile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description API version — must be `1` */
+                "X-API-Version": "1";
+            };
+            path: {
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": Record<string, never>;
                 };
             };
         };

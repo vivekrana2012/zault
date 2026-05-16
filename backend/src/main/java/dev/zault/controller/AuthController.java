@@ -1,5 +1,10 @@
 package dev.zault.controller;
 
+import dev.zault.api.ErrorResponse;
+import dev.zault.api.auth.LoginResponse;
+import dev.zault.api.auth.LogoutResponse;
+import dev.zault.api.auth.MeResponse;
+import dev.zault.api.auth.RegisterResponse;
 import dev.zault.db.UserDatabaseService;
 import dev.zault.model.User;
 import dev.zault.repository.UserRepository;
@@ -7,6 +12,11 @@ import dev.zault.security.AuthenticatedUserPrincipal;
 import dev.zault.security.JwtAuthenticationFilter;
 import dev.zault.security.JwtService;
 import dev.zault.util.IdentityNormalizer;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.Cookie;
@@ -112,6 +122,15 @@ public class AuthController {
     public record LoginRequest(String username, String password) {}
     public record RegisterRequest(String username, String email, String displayName, String password) {}
 
+    @Operation(summary = "Register a new user")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "User registered",
+                    content = @Content(schema = @Schema(implementation = RegisterResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation error",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Conflict",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@RequestBody RegisterRequest request) {
         // Validate required fields
@@ -192,6 +211,17 @@ public class AuthController {
                         "userId", user.getId()));
     }
 
+    @Operation(summary = "Authenticate user")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Authenticated",
+                    content = @Content(schema = @Schema(implementation = LoginResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation error",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Invalid credentials",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "423", description = "Account locked",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(
             @RequestBody LoginRequest request,
@@ -254,6 +284,11 @@ public class AuthController {
                 "scopes", jwtService.getDefaultUserScopes()));
     }
 
+    @Operation(summary = "Logout current user")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Logged out",
+                    content = @Content(schema = @Schema(implementation = LogoutResponse.class)))
+    })
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(HttpServletResponse response) {
         clearJwtCookie(response);
@@ -262,6 +297,13 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("status", "logged_out"));
     }
 
+    @Operation(summary = "Get current authenticated user")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Current user",
+                    content = @Content(schema = @Schema(implementation = MeResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Not authenticated",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> me(Principal principal, Authentication authentication) {
         if (principal == null) {

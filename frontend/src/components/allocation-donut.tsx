@@ -1,4 +1,6 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useMemo } from "react"
+import { pie, arc } from "d3-shape"
+import type { PieArcDatum } from "d3-shape"
 import type { HoldingWithPercentage } from "@/hooks/use-holdings"
 import type { CurrencySymbol } from "@/types/holdings"
 
@@ -36,54 +38,59 @@ interface AllocationDonutProps {
 }
 
 function formatAmount(amount: number, currency: CurrencySymbol): string {
-  if (amount >= 10_000_000) return `${currency}${(amount / 10_000_000).toFixed(1)}Cr`
-  if (amount >= 100_000) return `${currency}${(amount / 100_000).toFixed(1)}L`
-  if (amount >= 1_000) return `${currency}${(amount / 1_000).toFixed(1)}K`
+  if (amount >= 10_000_000) return `${currency}${(amount / 10_000_000).toFixed(2)}Cr`
+  if (amount >= 100_000) return `${currency}${(amount / 100_000).toFixed(2)}L`
+  if (amount >= 1_000) return `${currency}${(amount / 1_000).toFixed(2)}K`
   return `${currency}${amount.toLocaleString()}`
 }
 
-function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = ((angleDeg - 90) * Math.PI) / 180
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
-}
+const SIZE = 400
+const CX = SIZE / 2
+const CY = SIZE / 2
+const OUTER_R = 170
+const INNER_R = 115
+const HOVER_OUTER_R = 174
+const HOVER_INNER_R = 111
 
-function describeArc(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
-  const start = polarToCartesian(cx, cy, r, endAngle)
-  const end = polarToCartesian(cx, cy, r, startAngle)
-  const largeArc = endAngle - startAngle > 180 ? 1 : 0
-  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y}`
-}
+const pieLayout = pie<HoldingWithPercentage>()
+  .value((d) => d.percentage)
+  .sort(null)
+  .padAngle(0.015)
+
+const normalArc = arc<PieArcDatum<HoldingWithPercentage>>()
+  .innerRadius(INNER_R)
+  .outerRadius(OUTER_R)
+  .cornerRadius(0)
+
+const hoverArc = arc<PieArcDatum<HoldingWithPercentage>>()
+  .innerRadius(HOVER_INNER_R)
+  .outerRadius(HOVER_OUTER_R)
+  .cornerRadius(0)
 
 export function AllocationDonut({ holdings, total, currency }: AllocationDonutProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
-  const size = 400
-  const cx = size / 2
-  const cy = size / 2
-  const outerR = 170
-  const strokeWidth = 55
-  const hoverStrokeWidth = strokeWidth * 1.15
-  const r = outerR - strokeWidth / 2
 
-  // Detect dark mode via CSS custom property
   const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark")
   const fills = isDark ? DARK_SLICE_FILLS : SLICE_FILLS
+
+  const arcs = useMemo(() => pieLayout(holdings), [holdings])
 
   if (holdings.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4">
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-label="Empty allocation chart">
+        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} aria-label="Empty allocation chart">
           <circle
-            cx={cx}
-            cy={cy}
-            r={r}
+            cx={CX}
+            cy={CY}
+            r={(OUTER_R + INNER_R) / 2}
             fill="none"
             stroke="currentColor"
-            strokeWidth={strokeWidth}
+            strokeWidth={OUTER_R - INNER_R}
             opacity={0.1}
           />
-          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-sm">
+          <text x={CX} y={CY} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-sm">
             No holdings
           </text>
         </svg>
@@ -91,85 +98,40 @@ export function AllocationDonut({ holdings, total, currency }: AllocationDonutPr
     )
   }
 
-  let currentAngle = 0
-  const slices = holdings.map((h, i) => {
-    const sliceAngle = (h.percentage / 100) * 360
-    // Avoid rendering a zero-width slice
-    if (sliceAngle < 0.5) {
-      return null
-    }
-    const startAngle = currentAngle
-    const endAngle = currentAngle + sliceAngle
-    currentAngle = endAngle
-
-    // For a full circle (single holding), use two semicircles
-    if (sliceAngle >= 359.9) {
-      const isHovered = hoveredId === h.id
-      return (
-        <g
-          key={h.id}
-          onMouseEnter={() => setHoveredId(h.id)}
-          onMouseLeave={() => setHoveredId(null)}
-          onMouseMove={(e) => {
-            if (!containerRef.current) return
-            const rect = containerRef.current.getBoundingClientRect()
-            setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
-          }}
-          className="cursor-pointer"
-        >
-          <circle
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill="none"
-            stroke={fills[i % fills.length]}
-            strokeWidth={isHovered ? hoverStrokeWidth : strokeWidth}
-            className="transition-all duration-150"
-          />
-        </g>
-      )
-    }
-
-    const path = describeArc(cx, cy, r, startAngle, endAngle)
-    const isHovered = hoveredId === h.id
-    return (
-      <g
-        key={h.id}
-        onMouseEnter={() => setHoveredId(h.id)}
-        onMouseLeave={() => setHoveredId(null)}
-        onMouseMove={(e) => {
-          if (!containerRef.current) return
-          const rect = containerRef.current.getBoundingClientRect()
-          setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
-        }}
-        className="cursor-pointer"
-      >
-        <path
-          d={path}
-          fill="none"
-          stroke={fills[i % fills.length]}
-          strokeWidth={isHovered ? hoverStrokeWidth : strokeWidth}
-          strokeLinecap="butt"
-          className="transition-all duration-150"
-        />
-      </g>
-    )
-  })
-
   const hoveredHolding = holdings.find((h) => h.id === hoveredId)
 
   return (
     <div ref={containerRef} className="relative flex flex-col items-center gap-4">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-label="Portfolio allocation donut chart" role="img">
-        {slices}
-        <text x={cx} y={cy - 8} textAnchor="middle" dominantBaseline="middle" className="fill-foreground text-lg font-bold">
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} aria-label="Portfolio allocation donut chart" role="img">
+        <g transform={`translate(${CX},${CY})`}>
+          {arcs.map((d, i) => {
+            const isHovered = hoveredId === d.data.id
+            const pathD = (isHovered ? hoverArc : normalArc)(d)
+            if (!pathD) return null
+            return (
+              <path
+                key={d.data.id}
+                d={pathD}
+                fill={fills[i % fills.length]}
+                className="cursor-pointer transition-all duration-150"
+                onMouseEnter={() => setHoveredId(d.data.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                onMouseMove={(e) => {
+                  if (!containerRef.current) return
+                  const rect = containerRef.current.getBoundingClientRect()
+                  setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+                }}
+              />
+            )
+          })}
+        </g>
+        <text x={CX} y={CY - 8} textAnchor="middle" dominantBaseline="middle" className="fill-foreground text-lg font-bold">
           {formatAmount(total, currency)}
         </text>
-        <text x={cx} y={cy + 14} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-xs">
+        <text x={CX} y={CY + 14} textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground text-xs">
           Total
         </text>
       </svg>
-      {/* Themed tooltip */}
       {hoveredHolding && (
         <div
           className="pointer-events-none absolute z-50 border border-foreground bg-background px-3 py-1.5 text-sm text-foreground shadow-md"
@@ -178,7 +140,6 @@ export function AllocationDonut({ holdings, total, currency }: AllocationDonutPr
           {hoveredHolding.category}: {currency}{hoveredHolding.amount.toLocaleString()} ({hoveredHolding.percentage.toFixed(1)}%)
         </div>
       )}
-      {/* Legend */}
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
         {holdings.map((h, i) => (
           <div key={h.id} className="flex items-center gap-1.5 text-xs">

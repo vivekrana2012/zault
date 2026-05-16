@@ -16,3 +16,9 @@
   - Folder-scoped `.instructions.md` files for backend/ and frontend/
   - Split CONTEXT.md into root (architecture), backend/CONTEXT.md, frontend/CONTEXT.md
   - Root copilot-instructions.md updated with context scoping rules + API workflow
+
+
+## 2026-05-16
+
+- Maybe the tradebook ingestion should be async.
+- Fix logging, otherwise we are going to have a mess.
