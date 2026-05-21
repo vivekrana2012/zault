@@ -32,12 +32,6 @@ When making **any** frontend change, follow this discovery sequence:
 
 Do NOT read backend Java code. The API spec (`docs/api/openapi.yaml`) is the single source of truth for the contract between frontend and backend.
 
-## Environment
-
-```bash
-export JAVA_HOME="/Users/viv/Library/Java/JavaVirtualMachines/corretto-25.0.2/Contents/Home"
-```
-
 ## Conventions
 
 - **All CLI commands** should reference `Makefile` targets when possible (e.g., suggest `make dev` not `docker compose up --build`).

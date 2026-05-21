@@ -5,6 +5,7 @@ import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
 import HomePage from '@/pages/HomePage'
 import TradebookPage from '@/pages/TradebookPage'
+import AnalysisPage from '@/pages/AnalysisPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
             <Route path="/" element={<PrivateRoute><HomePage /></PrivateRoute>} />
             <Route path="/tradebook" element={<PrivateRoute><TradebookPage /></PrivateRoute>} />
+            <Route path="/analysis" element={<PrivateRoute><AnalysisPage /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>

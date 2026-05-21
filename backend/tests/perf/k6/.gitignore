@@ -1,0 +1,16 @@
+# Generated load data
+/data/generated/*.csv
+
+# Local overrides
+.env
+
+# Run outputs
+/results/*.json
+/results/*.html
+/results/*.log
+/results/*.csv
+
+# Keep directory markers
+!/data/generated/.gitkeep
+!/results/.gitkeep
+

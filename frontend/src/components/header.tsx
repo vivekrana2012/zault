@@ -9,6 +9,7 @@ import logo from "@/assets/zault_logo.png"
 const NAV_LINKS = [
   { to: "/", label: "Portfolio" },
   { to: "/tradebook", label: "Tradebook" },
+  { to: "/analysis", label: "Analysis" },
 ] as const
 
 interface HeaderProps {

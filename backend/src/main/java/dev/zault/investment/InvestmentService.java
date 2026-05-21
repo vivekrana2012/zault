@@ -15,7 +15,7 @@ import java.util.Optional;
 public class InvestmentService {
 
     private static final int MAX_CATEGORY_LENGTH = 100;
-    private static final int MAX_AMOUNT_SCALE = 2;
+    private static final int MAX_AMOUNT_SCALE = 4;
 
     private final UserDatabaseService userDatabaseService;
 
@@ -26,6 +26,8 @@ public class InvestmentService {
     public List<InvestmentDto> listInvestments() {
         return userDatabaseService.withCurrentUserDatabase("db:read", connection -> {
             List<InvestmentDto> items = new ArrayList<>();
+
+            // TODO: should we have a query file where we put all SQL queries to improve readability ?
             try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT id, category, amount FROM investments ORDER BY id ASC");
                  ResultSet resultSet = statement.executeQuery()) {
@@ -33,6 +35,7 @@ public class InvestmentService {
                     items.add(mapRow(resultSet));
                 }
             }
+
             return items;
         });
     }
@@ -132,9 +135,11 @@ public class InvestmentService {
     }
 
     private InvestmentDto mapRow(ResultSet resultSet) throws java.sql.SQLException {
+
         long id = resultSet.getLong("id");
         String category = resultSet.getString("category");
         BigDecimal amount = new BigDecimal(resultSet.getString("amount"));
+
         return new InvestmentDto(id, category, amount);
     }
 }

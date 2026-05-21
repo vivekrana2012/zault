@@ -1,5 +1,8 @@
 package dev.zault.db;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import dev.zault.security.AuthenticatedUserPrincipal;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -12,42 +15,80 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class UserDatabaseService {
 
     private static final Logger log = LoggerFactory.getLogger(UserDatabaseService.class);
+    private static final String TEMPLATE_DB_NAME = ".template-user.db";
+    // DB filename includes the UUID to prevent accidental cross-user reads
+    private static final String DB_EXTENSION = ".db";
 
     private final Path baseDir;
-    private final int maxOpenConnections;
+    private final Path templatePath;
     private final int busyTimeoutMs;
-    private final Map<String, Connection> connectionCache = new LinkedHashMap<>(16, 0.75f, true);
-    private final Set<String> initializedUserIds = ConcurrentHashMap.newKeySet();
+    private final Cache<String, Connection> connectionCache;
 
     public UserDatabaseService(
             @Value("${zault.user-db.base-dir:./user-dbs}") String baseDir,
-            @Value("${zault.user-db.max-open-connections:32}") int maxOpenConnections,
-            @Value("${zault.user-db.busy-timeout-ms:5000}") int busyTimeoutMs) {
+            @Value("${zault.user-db.busy-timeout-ms:5000}") int busyTimeoutMs,
+            @Value("${zault.user-db.max-connections:1000}") int maxConnections,
+            @Value("${zault.user-db.idle-timeout-minutes:30}") int idleTimeoutMinutes) {
         this.baseDir = Path.of(baseDir);
-        this.maxOpenConnections = Math.max(1, maxOpenConnections);
+        this.templatePath = this.baseDir.resolve(TEMPLATE_DB_NAME);
         this.busyTimeoutMs = Math.max(1000, busyTimeoutMs);
+
+        this.connectionCache = Caffeine.newBuilder()
+                .maximumSize(maxConnections)
+                .expireAfterAccess(idleTimeoutMinutes, TimeUnit.MINUTES)
+                .removalListener((String key, Connection connection, RemovalCause cause) -> {
+                    log.debug("Evicting connection for user {} (cause: {})", key, cause);
+                    closeQuietly(connection);
+                })
+                .build();
+
+        if (!Files.exists(templatePath)) {
+            throw new IllegalStateException(
+                    "Template user DB not found at " + templatePath.toAbsolutePath()
+                            + ". Run scripts/create-template-db.sh first.");
+        }
+        log.info("Using template user DB: {}", templatePath.toAbsolutePath());
     }
 
     public void ensureUserDatabase(String userId) {
-        withUserConnection(userId, connection -> null);
+        String normalizedUserId = normalizeUserId(userId);
+        Path dbPath = getUserDbPath(normalizedUserId);
+        if (Files.exists(dbPath)) {
+            return;
+        }
+        try {
+            Files.createDirectories(dbPath.getParent());
+            Files.copy(templatePath, dbPath, StandardCopyOption.COPY_ATTRIBUTES);
+            // Maybe this is an overhead with a dedicated connection just for one insert that too without caching.
+            // Stamp created_at for this specific user.
+            try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath())) {
+                applyPragmas(conn);
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("INSERT OR IGNORE INTO user_db_meta (key, value) VALUES ('created_at', CURRENT_TIMESTAMP)");
+                }
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to create user DB from template: " + dbPath, e);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to stamp user DB metadata: " + dbPath, e);
+        }
     }
 
     public <T> T withCurrentUserDatabase(String requiredScope, SqlFunction<Connection, T> callback) {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
+
         if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUserPrincipal principal)) {
             throw new AccessDeniedException("No authenticated user available");
         }
@@ -59,65 +100,60 @@ public class UserDatabaseService {
         return withUserConnection(principal.userId(), callback);
     }
 
-    public synchronized Path getUserDatabasePath(String userId) {
-        return baseDir.resolve(normalizeUserId(userId) + ".db");
+    public Path getUserDatabasePath(String userId) {
+        return getUserDbPath(normalizeUserId(userId));
+    }
+
+    /**
+     * Returns the user's directory (for storing additional per-user files).
+     */
+    public Path getUserDir(String userId) {
+        String normalized = normalizeUserId(userId);
+        String hex = normalized.replace("-", "");
+        return baseDir
+                .resolve(hex.substring(0, 2))
+                .resolve(hex.substring(2, 4))
+                .resolve(normalized);
     }
 
     public <T> T withUserConnection(String userId, SqlFunction<Connection, T> callback) {
         String normalizedUserId = normalizeUserId(userId);
-        Connection connection;
-        synchronized (this) {
-            connection = getOrCreateConnection(normalizedUserId);
+        Connection connection = connectionCache.get(normalizedUserId, this::openConnection);
+
+        // Health check: if stale, invalidate and get a fresh connection
+        if (!isConnectionHealthy(connection)) {
+            connectionCache.invalidate(normalizedUserId);
+            connection = connectionCache.get(normalizedUserId, this::openConnection);
         }
 
-        synchronized (connection) {
-            try {
-                ensureInitialized(normalizedUserId, connection);
-                return callback.apply(connection);
-            } catch (SQLException e) {
-                throw new IllegalStateException("Failed to execute user DB operation for user " + normalizedUserId, e);
-            }
+        try {
+            return callback.apply(connection);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to execute user DB operation for user " + normalizedUserId, e);
         }
     }
 
     @PreDestroy
-    public synchronized void closeAll() {
-        for (Connection connection : connectionCache.values()) {
-            closeQuietly(connection);
-        }
-        connectionCache.clear();
-        initializedUserIds.clear();
+    public void closeAll() {
+        connectionCache.invalidateAll();
+        connectionCache.cleanUp();
     }
 
-    private synchronized Connection getOrCreateConnection(String userId) {
-        Connection existing = connectionCache.get(userId);
-        if (existing != null) {
-            if (isConnectionHealthy(existing)) {
-                return existing;
-            }
-            connectionCache.remove(userId);
-            closeQuietly(existing);
-        }
-
-        Connection created = openConnection(userId);
-        connectionCache.put(userId, created);
-
-        if (connectionCache.size() > maxOpenConnections) {
-            String eldestKey = connectionCache.keySet().iterator().next();
-            Connection evicted = connectionCache.remove(eldestKey);
-            closeQuietly(evicted);
-            log.debug("Evicted user DB connection for userId={}", eldestKey);
-        }
-
-        return created;
+    private Path getUserDbPath(String normalizedUserId) {
+        String hex = normalizedUserId.replace("-", "");
+        return baseDir
+                .resolve(hex.substring(0, 2))
+                .resolve(hex.substring(2, 4))
+                .resolve(normalizedUserId)
+                .resolve(normalizedUserId + DB_EXTENSION);
     }
 
     private Connection openConnection(String userId) {
-        Path dbPath = getUserDatabasePath(userId);
-        try {
-            Files.createDirectories(baseDir);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to create user DB directory: " + baseDir, e);
+        Path dbPath = getUserDbPath(userId);
+
+        // If DB doesn't exist yet (edge case: connection requested before ensureUserDatabase)
+        if (!Files.exists(dbPath)) {
+            ensureUserDatabase(userId);
         }
 
         try {
@@ -127,14 +163,6 @@ public class UserDatabaseService {
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to open user DB: " + dbPath, e);
         }
-    }
-
-    private void ensureInitialized(String userId, Connection connection) throws SQLException {
-        if (initializedUserIds.contains(userId)) {
-            return;
-        }
-        initializeSchema(connection);
-        initializedUserIds.add(userId);
     }
 
     private String normalizeUserId(String userId) {
@@ -150,13 +178,7 @@ public class UserDatabaseService {
 
     private boolean isConnectionHealthy(Connection connection) {
         try {
-            if (connection.isClosed()) {
-                return false;
-            }
-            try (Statement statement = connection.createStatement()) {
-                statement.execute("SELECT 1");
-            }
-            return true;
+            return connection != null && !connection.isClosed();
         } catch (SQLException e) {
             return false;
         }
@@ -168,79 +190,6 @@ public class UserDatabaseService {
             statement.execute("PRAGMA synchronous=NORMAL");
             statement.execute("PRAGMA foreign_keys=ON");
             statement.execute("PRAGMA busy_timeout=" + busyTimeoutMs);
-        }
-    }
-
-    private void initializeSchema(Connection connection) throws SQLException {
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("""
-                    CREATE TABLE IF NOT EXISTS user_db_meta (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL
-                    )
-                    """);
-            statement.execute("""
-                    INSERT OR IGNORE INTO user_db_meta (key, value)
-                    VALUES ('created_at', CURRENT_TIMESTAMP)
-                    """);
-            statement.execute("""
-                    CREATE TABLE IF NOT EXISTS investments (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        category TEXT NOT NULL,
-                        amount NUMERIC NOT NULL CHECK (amount >= 0),
-                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """);
-            statement.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_investments_category
-                    ON investments(category)
-                    """);
-
-            // Tradebook tables
-            statement.execute("""
-                    CREATE TABLE IF NOT EXISTS tradebook_files (
-                        id TEXT PRIMARY KEY,
-                        filename TEXT NOT NULL,
-                        row_count INTEGER NOT NULL,
-                        uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """);
-            statement.execute("""
-                    CREATE TABLE IF NOT EXISTS trades (
-                        trade_id TEXT PRIMARY KEY,
-                        file_id TEXT NOT NULL,
-                        symbol TEXT NOT NULL,
-                        isin TEXT NOT NULL,
-                        trade_date TEXT NOT NULL,
-                        exchange TEXT NOT NULL,
-                        segment TEXT NOT NULL,
-                        series TEXT NOT NULL,
-                        trade_type TEXT NOT NULL,
-                        auction INTEGER NOT NULL,
-                        quantity TEXT NOT NULL,
-                        price TEXT NOT NULL,
-                        order_id TEXT NOT NULL,
-                        order_execution_time TEXT NOT NULL
-                    )
-                    """);
-            statement.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_trades_isin
-                    ON trades(isin)
-                    """);
-            statement.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_trades_file_id
-                    ON trades(file_id)
-                    """);
-            statement.execute("""
-                    CREATE TABLE IF NOT EXISTS allocations (
-                        isin TEXT PRIMARY KEY,
-                        symbol TEXT NOT NULL,
-                        net_quantity TEXT NOT NULL,
-                        invested_amount TEXT NOT NULL,
-                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """);
         }
     }
 
@@ -260,4 +209,3 @@ public class UserDatabaseService {
         R apply(T input) throws SQLException;
     }
 }
-

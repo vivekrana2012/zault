@@ -1,5 +1,5 @@
 # Production compose — pulls pre-built images from Docker Hub.
-# Used on the Debian laptop. Includes Watchtower for auto-updates.
+# Used on the Debian laptop.
 
 services:
   backend:
@@ -25,16 +25,6 @@ services:
       - "80:80"
     depends_on:
       - backend
-
-  watchtower:
-    image: containrrr/watchtower
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=300
-      - WATCHTOWER_LABEL_ENABLE=false
 
 volumes:
   zault_data:

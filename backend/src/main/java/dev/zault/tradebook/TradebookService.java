@@ -22,6 +22,9 @@ public class TradebookService {
 
     private static final Logger log = LoggerFactory.getLogger(TradebookService.class);
     private static final int BATCH_SIZE = 500;
+    private static final int QUANTITY_SCALE = 3;
+    private static final int AMOUNT_SCALE = 4;
+    private static final int PRICE_SCALE = 4;
 
     private final UserDatabaseService userDatabaseService;
 
@@ -274,71 +277,37 @@ public class TradebookService {
     }
 
     private void recomputeAllocations(Connection connection) throws SQLException {
-        // Clear existing allocations
+        // Single SQL: delete + recompute allocations via GROUP BY at the DB level.
+        // This avoids transferring all trade rows to Java and is significantly faster
+        // for large datasets since SQLite handles the aggregation natively in C.
         try (PreparedStatement ps = connection.prepareStatement("DELETE FROM allocations")) {
             ps.executeUpdate();
         }
 
-        // Compute net positions grouped by ISIN
         String sql = """
-                SELECT isin, symbol, trade_type,
-                       SUM(CAST(quantity AS REAL)) as total_qty,
-                       SUM(CAST(quantity AS REAL) * CAST(price AS REAL)) as total_amount
-                FROM trades
-                GROUP BY isin, trade_type
-                """;
-
-        record IsinAgg(String symbol, BigDecimal buyQty, BigDecimal buyAmount,
-                       BigDecimal sellQty, BigDecimal sellAmount) {
-        }
-
-        java.util.Map<String, IsinAgg> aggs = new java.util.HashMap<>();
-
-        try (PreparedStatement ps = connection.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                String isin = rs.getString("isin");
-                String symbol = rs.getString("symbol");
-                String tradeType = rs.getString("trade_type");
-                BigDecimal qty = BigDecimal.valueOf(rs.getDouble("total_qty"));
-                BigDecimal amount = BigDecimal.valueOf(rs.getDouble("total_amount"));
-
-                IsinAgg existing = aggs.getOrDefault(isin, new IsinAgg(symbol,
-                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
-
-                if ("buy".equals(tradeType)) {
-                    aggs.put(isin, new IsinAgg(symbol,
-                            existing.buyQty().add(qty), existing.buyAmount().add(amount),
-                            existing.sellQty(), existing.sellAmount()));
-                } else {
-                    aggs.put(isin, new IsinAgg(existing.symbol(),
-                            existing.buyQty(), existing.buyAmount(),
-                            existing.sellQty().add(qty), existing.sellAmount().add(amount)));
-                }
-            }
-        }
-
-        // Insert only positive net positions
-        String insertSql = """
                 INSERT INTO allocations (isin, symbol, net_quantity, invested_amount, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """;
-        try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
-            for (var entry : aggs.entrySet()) {
-                String isin = entry.getKey();
-                IsinAgg agg = entry.getValue();
-                BigDecimal netQty = agg.buyQty().subtract(agg.sellQty());
-                BigDecimal netAmount = agg.buyAmount().subtract(agg.sellAmount());
+                SELECT
+                    isin,
+                    symbol,
+                    ROUND(
+                        SUM(CASE WHEN trade_type = 'buy' THEN CAST(quantity AS REAL)
+                                 ELSE -CAST(quantity AS REAL) END),
+                        %d
+                    ),
+                    ROUND(
+                        SUM(CASE WHEN trade_type = 'buy' THEN CAST(quantity AS REAL) * CAST(price AS REAL)
+                                 ELSE -CAST(quantity AS REAL) * CAST(price AS REAL) END),
+                        %d
+                    ),
+                    CURRENT_TIMESTAMP
+                FROM trades
+                GROUP BY isin
+                HAVING SUM(CASE WHEN trade_type = 'buy' THEN CAST(quantity AS REAL)
+                                ELSE -CAST(quantity AS REAL) END) > 0
+                """.formatted(QUANTITY_SCALE, AMOUNT_SCALE);
 
-                if (netQty.signum() > 0) {
-                    ps.setString(1, isin);
-                    ps.setString(2, agg.symbol());
-                    ps.setString(3, netQty.setScale(3, RoundingMode.HALF_UP).toPlainString());
-                    ps.setString(4, netAmount.setScale(4, RoundingMode.HALF_UP).toPlainString());
-                    ps.addBatch();
-                }
-            }
-            ps.executeBatch();
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.executeUpdate();
         }
     }
 
@@ -364,6 +333,27 @@ public class TradebookService {
         return new AllocationsDto(allocations, total);
     }
 
+    public TradeTimelineDto getTradeTimeline() {
+        return userDatabaseService.withCurrentUserDatabase("db:read", connection -> {
+            List<TradeTimelineDto.TradePoint> trades = new ArrayList<>();
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT order_execution_time, trade_type, quantity, price FROM trades WHERE order_execution_time IS NOT NULL AND order_execution_time != ''")) {
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        BigDecimal qty = new BigDecimal(rs.getString("quantity"));
+                        BigDecimal price = new BigDecimal(rs.getString("price"));
+                        BigDecimal amount = qty.multiply(price).setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+                        trades.add(new TradeTimelineDto.TradePoint(
+                                rs.getString("order_execution_time"),
+                                rs.getString("trade_type"),
+                                amount));
+                    }
+                }
+            }
+            return new TradeTimelineDto(trades);
+        });
+    }
+
     private TradeDto mapTradeRow(ResultSet rs) throws SQLException {
         return new TradeDto(
                 rs.getString("trade_id"),
@@ -376,8 +366,8 @@ public class TradebookService {
                 rs.getString("series"),
                 rs.getString("trade_type"),
                 rs.getInt("auction") == 1,
-                new BigDecimal(rs.getString("quantity")).setScale(3, RoundingMode.HALF_UP),
-                new BigDecimal(rs.getString("price")).setScale(4, RoundingMode.HALF_UP),
+                new BigDecimal(rs.getString("quantity")).setScale(QUANTITY_SCALE, RoundingMode.HALF_UP),
+                new BigDecimal(rs.getString("price")).setScale(PRICE_SCALE, RoundingMode.HALF_UP),
                 rs.getString("order_id"),
                 rs.getString("order_execution_time"));
     }

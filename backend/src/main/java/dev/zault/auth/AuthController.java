@@ -1,4 +1,4 @@
-package dev.zault.controller;
+package dev.zault.auth;
 
 import dev.zault.api.ErrorResponse;
 import dev.zault.api.auth.LoginResponse;
@@ -24,14 +24,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
-import java.util.Locale;
 import java.sql.ResultSet;
 import java.util.List;
 import java.util.Map;
@@ -184,9 +182,9 @@ public class AuthController {
 
         User user = new User(UUID.randomUUID().toString(), username, passwordEncoder.encode(request.password()), email, displayName);
         try {
-            userRepository.saveAndFlush(user);
-        } catch (DataIntegrityViolationException e) {
-            String conflictMsg = resolveRegistrationConflictMessage(e);
+            userRepository.save(user);
+        } catch (Exception e) {
+            String conflictMsg = resolveConflict(e);
             if (conflictMsg.contains("Username")) {
                 registerFailUsernameTaken.increment();
                 log.warn("auth.register result=failure reason=username_taken username={}", username);
@@ -361,20 +359,15 @@ public class AuthController {
         response.addCookie(cookie);
     }
 
-    private String resolveRegistrationConflictMessage(DataIntegrityViolationException e) {
-        String message = e.getMostSpecificCause().getMessage();
-        if (message == null) {
-            return "Username or email is already registered";
-        }
-        String lowerMessage = message.toLowerCase(Locale.ROOT);
-        if (lowerMessage.contains("users.username")) {
+    private String resolveConflict(Exception e) {
+        String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+        if (msg.contains("username")) {
             return "Username is already taken";
-        }
-        if (lowerMessage.contains("users.email")) {
+        } else if (msg.contains("email")) {
             return "Email is already registered";
         }
         return "Username or email is already registered";
     }
-}
 
+}
 

@@ -307,6 +307,28 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/TradesPageDto"
+  /api/tradebook/trades/timeline:
+    get:
+      tags:
+      - tradebook-controller
+      operationId: getTradeTimeline
+      parameters:
+      - name: X-API-Version
+        in: header
+        description: API version — must be `1`
+        required: true
+        schema:
+          type: string
+          default: "1"
+          enum:
+          - "1"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TradeTimelineDto"
   /api/tradebook/allocations:
     get:
       tags:
@@ -495,6 +517,22 @@ components:
         size:
           type: integer
           format: int32
+    TradePoint:
+      type: object
+      properties:
+        time:
+          type: string
+        tradeType:
+          type: string
+        amount:
+          type: number
+    TradeTimelineDto:
+      type: object
+      properties:
+        trades:
+          type: array
+          items:
+            $ref: "#/components/schemas/TradePoint"
     TradeFileDto:
       type: object
       properties:

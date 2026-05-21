@@ -12,6 +12,9 @@ import dev.zault.security.AuthenticatedUserPrincipal;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Set;
 
@@ -30,9 +33,10 @@ class TradebookServiceTest {
     private TradebookService tradebookService;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        createTemplateDb(tempDir);
         UserDatabaseService userDatabaseService = new UserDatabaseService(
-                tempDir.toString(), 4, 5000);
+                tempDir.toString(), 5000, 1000, 30);
         tradebookService = new TradebookService(userDatabaseService);
         setAuthContext();
     }
@@ -159,6 +163,21 @@ class TradebookServiceTest {
     }
 
     @Test
+    void allocationsPreserveFourDecimalAmountPrecision() {
+        MockMultipartFile file = csvFile("trades.csv",
+                VALID_HEADER + "\n"
+                        + "MF1,INF001,2024-04-04,BSE,MF,,buy,false,1.000,10.1234,T1,O1,2024-04-04T09:07:37\n"
+                        + "MF1,INF001,2024-04-05,BSE,MF,,sell,false,0.250,10.0001,T2,O2,2024-04-05T10:00:00\n");
+
+        UploadResultDto result = tradebookService.uploadFiles(List.of(file));
+
+        assertEquals(1, result.allocations().size());
+        AllocationDto allocation = result.allocations().getFirst();
+        assertEquals(0, allocation.investedAmount().compareTo(new java.math.BigDecimal("7.6234")));
+        assertEquals(0, result.totalInvested().compareTo(new java.math.BigDecimal("7.6234")));
+    }
+
+    @Test
     void listFilesReturnsAllUploaded() {
         MockMultipartFile file1 = csvFile("a.csv",
                 VALID_HEADER + "\n"
@@ -199,6 +218,50 @@ class TradebookServiceTest {
                 tradebookService.deleteFile("non-existent-id"));
     }
 
+    @Test
+    void getTradeTimelineReturnsNonNullTimes() {
+        MockMultipartFile file = csvFile("trades.csv",
+                VALID_HEADER + "\n"
+                        + "ICICI,INE090A01021,2024-04-04,NSE,EQ,EQ,buy,false,92,1084.75,T1,O1,2024-04-04T09:07:37\n"
+                        + "HDFC,INE040A01034,2024-04-05,NSE,EQ,EQ,sell,false,50,1500.00,T2,O2,2024-04-05T10:00:00\n"
+                        + "RELIANCE,INE002A01018,2024-04-06,NSE,EQ,EQ,buy,false,20,2500.00,T3,O3,\n");
+
+        tradebookService.uploadFiles(List.of(file));
+
+        TradeTimelineDto result = tradebookService.getTradeTimeline();
+
+        // T3 has empty execution time, should be excluded
+        assertEquals(2, result.trades().size());
+
+        var t1 = result.trades().stream().filter(t -> t.time().equals("2024-04-04T09:07:37")).findFirst().orElseThrow();
+        assertEquals("buy", t1.tradeType());
+        assertEquals(0, t1.amount().compareTo(new java.math.BigDecimal("99797.0000")));
+
+        var t2 = result.trades().stream().filter(t -> t.time().equals("2024-04-05T10:00:00")).findFirst().orElseThrow();
+        assertEquals("sell", t2.tradeType());
+        assertEquals(0, t2.amount().compareTo(new java.math.BigDecimal("75000.0000")));
+    }
+
+    @Test
+    void getTradeTimelineRoundsAmountsToFourDecimals() {
+        MockMultipartFile file = csvFile("trades.csv",
+                VALID_HEADER + "\n"
+                        + "MF1,INF001,2024-04-04,BSE,MF,,buy,false,1.111,2.2222,T1,O1,2024-04-04T09:07:37\n");
+
+        tradebookService.uploadFiles(List.of(file));
+
+        TradeTimelineDto result = tradebookService.getTradeTimeline();
+
+        assertEquals(1, result.trades().size());
+        assertEquals(0, result.trades().getFirst().amount().compareTo(new java.math.BigDecimal("2.4689")));
+    }
+
+    @Test
+    void getTradeTimelineEmptyWhenNoTrades() {
+        TradeTimelineDto result = tradebookService.getTradeTimeline();
+        assertEquals(0, result.trades().size());
+    }
+
     private void setAuthContext() {
         var principal = new AuthenticatedUserPrincipal("testuser", USER_ID, Set.of("db:read", "db:write"));
         var auth = new TestingAuthenticationToken(principal, null, "ROLE_USER");
@@ -208,5 +271,40 @@ class TradebookServiceTest {
     private MockMultipartFile csvFile(String filename, String content) {
         return new MockMultipartFile("files", filename, "text/csv",
                 content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void createTemplateDb(Path dir) throws Exception {
+        Path templatePath = dir.resolve(".template-user.db");
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + templatePath.toAbsolutePath());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA journal_mode=WAL");
+            stmt.execute("CREATE TABLE IF NOT EXISTS user_db_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS investments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT NOT NULL,
+                    amount NUMERIC NOT NULL CHECK (amount >= 0),
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_investments_category ON investments(category)");
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS tradebook_files (
+                    id TEXT PRIMARY KEY, filename TEXT NOT NULL,
+                    row_count INTEGER NOT NULL, uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""");
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS trades (
+                    trade_id TEXT PRIMARY KEY, file_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL, isin TEXT NOT NULL, trade_date TEXT NOT NULL,
+                    exchange TEXT NOT NULL, segment TEXT NOT NULL, series TEXT NOT NULL,
+                    trade_type TEXT NOT NULL, auction INTEGER NOT NULL,
+                    quantity TEXT NOT NULL, price TEXT NOT NULL,
+                    order_id TEXT NOT NULL, order_execution_time TEXT NOT NULL)""");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_trades_isin ON trades(isin)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_trades_file_id ON trades(file_id)");
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS allocations (
+                    isin TEXT PRIMARY KEY, symbol TEXT NOT NULL,
+                    net_quantity TEXT NOT NULL, invested_amount TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""");
+        }
     }
 }

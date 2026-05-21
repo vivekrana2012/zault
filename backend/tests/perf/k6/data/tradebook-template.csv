@@ -1,0 +1,4 @@
+symbol,isin,trade_date,exchange,segment,series,trade_type,auction,quantity,price,trade_id,order_id,order_execution_time
+SYM100,INE100100A01001,2024-04-01,NSE,EQ,EQ,buy,false,10.000,123.4567,T1,O1,2024-04-01T09:15:00
+SYM101,INE100101A01002,2024-04-01,NSE,EQ,EQ,sell,false,5.500,140.0001,T2,O2,2024-04-01T09:16:00
+

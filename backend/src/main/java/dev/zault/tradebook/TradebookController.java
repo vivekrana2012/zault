@@ -1,7 +1,14 @@
 package dev.zault.tradebook;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -38,12 +45,8 @@ public class TradebookController {
 
     @DeleteMapping("/files/{fileId}")
     public ResponseEntity<?> deleteFile(@PathVariable String fileId) {
-        try {
-            DeleteResultDto result = tradebookService.deleteFile(fileId);
-            return ResponseEntity.ok(result);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
-        }
+        DeleteResultDto result = tradebookService.deleteFile(fileId);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/allocations")
@@ -57,5 +60,15 @@ public class TradebookController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String fileId) {
         return ResponseEntity.ok(tradebookService.getTrades(page, size, fileId));
+    }
+
+    @GetMapping("/trades/timeline")
+    public ResponseEntity<TradeTimelineDto> getTradeTimeline() {
+        return ResponseEntity.ok(tradebookService.getTradeTimeline());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException e) {
+        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
     }
 }

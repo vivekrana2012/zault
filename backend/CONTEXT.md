@@ -49,7 +49,7 @@
 - CSRF protection via `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header
 - Account lockout after 5 failed attempts for 15 minutes
 - Timing-attack mitigation on login (bcrypt runs even for unknown usernames)
-- Initial admin user seeded from `ZAULT_ADMIN_PASSWORD` env var on first startup
+- Users self-register via `/api/auth/register`
 
 ## API Versioning
 
@@ -70,7 +70,7 @@
 
 All schema changes must be reflected here and in the relevant source:
 - **Main DB** (`data/zault.db`) — update `src/main/resources/schema.sql`
-- **Per-user DB** (`data/users/{id}.db`) — update `UserDatabaseService.initializeSchema()`
+- **Per-user DB** — update `src/main/resources/user-schema.sql`, then re-run `scripts/create-template-db.sh`
 
 ### Main DB — `data/zault.db`
 
@@ -89,9 +89,39 @@ Managed by Spring SQL init from `schema.sql`. Hibernate DDL is disabled.
 | lockout_until | TIMESTAMP | Null when not locked |
 | created_at | TIMESTAMP | Immutable, default CURRENT_TIMESTAMP |
 
-### Per-user DB — `data/users/{userId}.db`
+### Per-user DB — Sharded Directory Structure
 
-Each user gets their own SQLite file named after their UUID user ID. Schema is applied by `UserDatabaseService.initializeSchema()` on first connection.
+Each user gets their own SQLite file stored in a 2-level sharded directory layout:
+
+```
+data/users/{hex[0:2]}/{hex[2:4]}/{uuid}/{uuid}.db
+```
+
+Where `hex` is the UUID with dashes removed. Example for user `f5153a7b-...`:
+
+```
+data/users/f5/15/f5153a7b-.../f5153a7b-....db
+```
+
+#### Template-based provisioning
+
+New user databases are **copied from a pre-built template** rather than running SQL at runtime:
+
+1. Schema is defined in `src/main/resources/user-schema.sql`
+2. `scripts/create-template-db.sh` builds `data/users/.template-user.db` from that schema (with WAL mode and pragmas pre-applied)
+3. On first access, `UserDatabaseService` copies the template to the user's sharded path and stamps `user_db_meta.created_at`
+
+The template must exist before the application starts. The app will fail fast with an error if it's missing.
+
+#### Migration from flat layout
+
+`scripts/migrate-user-dbs.sh` migrates legacy flat files (`data/users/{uuid}.db`) into the new sharded structure. Safe to run multiple times (idempotent).
+
+#### Connection management
+
+- Connections are cached via Caffeine (configurable max size and idle eviction)
+- SQLite pragmas applied on every connection: `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `busy_timeout`
+- Configurable via `zault.user-db.*` properties (`base-dir`, `busy-timeout-ms`, `max-connections`, `idle-timeout-minutes`)
 
 #### `user_db_meta`
 | Column | Type | Notes |
@@ -104,7 +134,7 @@ Each user gets their own SQLite file named after their UUID user ID. Schema is a
 |--------|------|-------|
 | id | INTEGER (PK) | Auto-increment |
 | category | TEXT | Not null |
-| amount | NUMERIC | Not null, `>= 0` |
+| amount | NUMERIC | Not null, `>= 0`, supports up to 4 decimal places |
 | created_at | TEXT | Default CURRENT_TIMESTAMP |
 | updated_at | TEXT | Default CURRENT_TIMESTAMP, updated on write |
 
@@ -144,7 +174,7 @@ Indexes: `idx_trades_isin` on `trades(isin)`, `idx_trades_file_id` on `trades(fi
 | isin | TEXT (PK) | Security identity |
 | symbol | TEXT | Not null |
 | net_quantity | TEXT | Not null, buy_qty - sell_qty |
-| invested_amount | TEXT | Not null, buy_amount - sell_amount |
+| invested_amount | TEXT | Not null, buy_amount - sell_amount, rounded to 4 decimal places |
 | updated_at | TEXT | Default CURRENT_TIMESTAMP |
 
 Pre-computed on every file upload/delete. Only positive net positions stored.
